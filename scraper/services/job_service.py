@@ -34,9 +34,6 @@ class JobService:
             return 60
 
     def create_job(self, job_data: dict) -> Job:
-        """
-        Create and save a new Job.
-        """
         try:
             job = Job.objects.create(
                 **job_data,
@@ -88,3 +85,22 @@ class JobService:
         except Exception as e:
             logger.error(f"Failed to update job: {e}")
             raise
+        
+    def delete_job(self, job_id):
+        try:
+            job = Job.objects.filter(id=job_id).first()
+            if not job:
+                raise ValueError(f"Job not found: {job_id}")
+
+            # Delete job
+            job.delete()
+
+            # Remove from active jobs if present
+            self.active_jobs.pop(str(job_id), None)
+
+            logger.info(f"Job deleted: {job_id}")
+            return job
+
+        except Exception as e:
+            logger.error(f"Failed to delete job: {e}", exc_info=True)
+            raise e

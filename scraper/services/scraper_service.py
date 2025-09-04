@@ -8,6 +8,12 @@ from django.utils import timezone
 from dotenv import load_dotenv
 from rest_framework.response import Response
 from rest_framework import status
+import asyncio
+import random
+import time
+import logging
+from datetime import datetime
+from playwright.async_api import async_playwright
 
 load_dotenv()
 
@@ -54,152 +60,14 @@ class ScraperService:
             {"width": 1366, "height": 768},
         ]
         
-        # self.USER_AGENTS = [
-        #     # Windows - Chrome
-        #     "Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
-        #     "AppleWebKit/537.36 (KHTML, like Gecko) "
-        #     "Chrome/115.0.0.0 Safari/537.36",
-
-        #     "Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:115.0) "
-        #     "Gecko/20100101 Firefox/115.0",
-
-        #     # Windows - Edge
-        #     "Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
-        #     "AppleWebKit/537.36 (KHTML, like Gecko) "
-        #     "Chrome/115.0.0.0 Safari/537.36 Edg/115.0.1901.183",
-
-        #     # Mac - Chrome
-        #     "Mozilla/5.0 (Macintosh; Intel Mac OS X 13_3) "
-        #     "AppleWebKit/537.36 (KHTML, like Gecko) "
-        #     "Chrome/115.0.0.0 Safari/537.36",
-
-        #     # Mac - Safari
-        #     "Mozilla/5.0 (Macintosh; Intel Mac OS X 13_3) "
-        #     "AppleWebKit/605.1.15 (KHTML, like Gecko) "
-        #     "Version/16.4 Safari/605.1.15",
-
-        #     # Mac - Firefox
-        #     "Mozilla/5.0 (Macintosh; Intel Mac OS X 13.3; rv:115.0) "
-        #     "Gecko/20100101 Firefox/115.0",
-
-        #     # Android - Chrome
-        #     "Mozilla/5.0 (Linux; Android 13; Pixel 7) "
-        #     "AppleWebKit/537.36 (KHTML, like Gecko) "
-        #     "Chrome/115.0.0.0 Mobile Safari/537.36",
-
-        #     "Mozilla/5.0 (Linux; Android 12; SM-G991B) "
-        #     "AppleWebKit/537.36 (KHTML, like Gecko) "
-        #     "Chrome/115.0.0.0 Mobile Safari/537.36",
-
-        #     # iPhone - Safari
-        #     "Mozilla/5.0 (iPhone; CPU iPhone OS 16_5 like Mac OS X) "
-        #     "AppleWebKit/605.1.15 (KHTML, like Gecko) "
-        #     "Version/16.5 Mobile/15E148 Safari/604.1",
-
-        #     # iPad - Safari
-        #     "Mozilla/5.0 (iPad; CPU OS 16_5 like Mac OS X) "
-        #     "AppleWebKit/605.1.15 (KHTML, like Gecko) "
-        #     "Version/16.5 Mobile/15E148 Safari/604.1"
-        # ]
-        
         # Ensure screenshot dirs exist
         base = Path(getattr(settings, "BASE_DIR", Path.cwd()))
         self.result_dir = base / "public" / "images" / "result"
         self.error_dir = base / "public" / "images" / "error"
         self.result_dir.mkdir(parents=True, exist_ok=True)
         self.error_dir.mkdir(parents=True, exist_ok=True)
-
-    # -------------------- Public API (Node: scrapeKeyword) --------------------
-        
-    # def scrape_keyword(self, keyword, method="auto", tool_type="google", options=None, job_id=None):
-    #     """
-    #     Port of Node's scrapeKeyword (sync version).
-    #     """
-    #     options = options or {}
-    #     job = None
-    #     start_time = time.time()
-
-    #     try:
-    #         if job_id:
-    #             job = self.job_service.update_job(
-    #                 job_id,
-    #                 updates={
-    #                     "status": "running",
-    #                     "started_at": timezone.now()
-    #                 }
-    #             )
-
-    #         logger.info(f'Starting scrape for "{keyword}" with method={method} tool_type={tool_type}')
-
-    #         methods = self._get_method_order(method)
-    #         result = None
-    #         last_error = None
-    #         method_used = None
-
-    #         for method_name in methods:
-    #             try:
-    #                 logger.info(f"Attempting method: {method_name}")
-    #                 result = self._scrape_with_method(keyword, method_name, tool_type, options)
-    #                 if result:
-    #                     result["method"] = method_name
-    #                     method_used = method_name
-    #                     break
-    #             except Exception as e:
-    #                 logger.warning(f"Method {method_name} failed: {e}")
-    #                 last_error = e
-    #                 continue
-
-    #         if not result:
-    #             raise RuntimeError(f"All methods failed. Last error: {getattr(last_error, 'args', [''])[0]}")
-
-    #         # augment metadata
-    #         result.setdefault("metadata", {})
-    #         result["metadata"].update({
-    #             "duration": int((time.time() - start_time) * 1000),
-    #             "methodUsed": method_used,
-    #             "timestamp": timezone.now().isoformat(),
-    #             "success": True,
-    #         })
-
-    #         # save result
-    #         if options.get("saveResults", True) is not False:
-    #             self.result_service.save_result(
-    #                 keyword=keyword,
-    #                 method=method_used,
-    #                 data=result,
-    #                 job_id=job_id,
-    #                 created_at=timezone.now(),
-    #                 user_id=getattr(job, "user_id", None) if job else None,
-    #             )
-
-    #         # mark job as completed
-    #         if job:
-    #             self.job_service.update_job(
-    #                 job_id,
-    #                 status="completed",
-    #                 results=result,
-    #                 completed_at=timezone.now(),
-    #                 progress=100,
-    #             )
-
-    #         logger.info(f'Successfully scraped "{keyword}" in {int((time.time() - start_time) * 1000)}ms')
-    #         return result
-
-    #     except Exception as e:
-    #         logger.error(f'Scraping failed for "{keyword}": {e}', exc_info=True)
-    #         if job:
-    #             self.job_service.update_job(
-    #                 job_id,
-    #                 status="failed",
-    #                 error=str(e),
-    #                 completed_at=timezone.now(),
-    #             )
-    #         raise
     
-    def scrape_keyword(self, keyword, method="auto", tool_type="google", options=None, job_id=None):
-        """
-        Updated scrape_keyword with proper JobService updates and SCRAPING_BROWSER_AUTHS rotation.
-        """
+    def scrape_keyword(self, keyword, method="auto", tool_type=None, options=None, job_id=None):
         options = options or {}
         job = None
         start_time = time.time()
@@ -225,7 +93,7 @@ class ScraperService:
                 )
 
             # logger.info(f'Starting scrape for "{keyword}" with method={method} tool_type={tool_type}')
-            print(f'Starting scrape for "{keyword}" with method={method} tool_type={tool_type}')
+            print(f'---> Starting scrape for "{keyword}" with method={method} tool_type={tool_type}')
 
             methods = self._get_method_order(method)
             result = None
@@ -243,6 +111,7 @@ class ScraperService:
                         break
                 except Exception as e:
                     logger.warning(f"Method {method_name} failed: {e}")
+                    print(f"Method {method_name} failed: {e}")
                     last_error = e
                     continue
 
@@ -264,6 +133,7 @@ class ScraperService:
                     keyword=keyword,
                     method=method_used,
                     data=result,
+                    metadata=result.get("metadata", {}),
                     job_id=job_id,
                     created_at=timezone.now(),
                     user_id=getattr(job, "user_id", None) if job else None,
@@ -315,16 +185,19 @@ class ScraperService:
             if tool_type == "google":
                 return self._scrape_with_scraping_browser(keyword, options)
             elif tool_type == "chatgpt":
-                raise NotImplementedError("chatgpt method not yet ported")
+                return self.scrape_with_scraping_browser_chatgpt(keyword, options)
             elif tool_type == "perplexity":
                 raise NotImplementedError("perplexity method not yet ported")
             else:
                 return {"error": "tool type not matched"}
+            
         elif method == "residentialProxy":
-            # Your Node fallback currently reuses scraping browser
-            if tool_type in {"google", "chatgpt", "perplexity"}:
+            if tool_type == "google":
                 return self._scrape_with_scraping_browser(keyword, options)
+            elif tool_type == "chatgpt":
+                return self.scrape_with_scraping_browser_chatgpt(keyword, options)
             return {"error": "tool type not matched"}
+        
         else:
             raise RuntimeError(f"Unknown scraping method: {method}")
 
@@ -335,22 +208,29 @@ class ScraperService:
         # logger.info("🔍 Google AI with Scraping Browser (Rotated)")
         print("🌐 Using Scraping Browser method")
         print("🔍 Google AI with Scraping Browser (Rotated)")
-
+        
         # proxy_config = self.proxy_rotation.get_healthy_scraping_browser()
         browser = None
 
         from playwright.sync_api import sync_playwright
         with sync_playwright() as p:
             try:
+                PROXY_USER = os.getenv("BRIGHT_DATA_USERNAME")
+                PROXY_PASS = os.getenv("BRIGHT_DATA_PASSWORD")
+                PROXY_HOST = os.getenv("BRIGHT_DATA_HOST", "brd.superproxy.io")
+                PROXY_PORT = os.getenv("BRIGHT_DATA_PORT", "9222")
+                
+                proxy_url = f"wss://{PROXY_USER}:{PROXY_PASS}@{PROXY_HOST}:{PROXY_PORT}"
                 # SCRAPING_BROWSER_AUTHS=
                 # brd-customer-hl_6f60e14f-zone-scraping_browser40_local:6lrx6el14z7d,
                 # brd-customer-hl_6f60e14f-zone-local_scraping_browser40:yykw61oh57t1,
                 # brd-customer-hl_6f60e14f-zone-scraping_browser42_local:ekcd14bqfgsw,
                 # brd-customer-hl_6f60e14f-zone-scraping_browser43_local:y1w019szrbod,
                 # brd-customer-hl_6f60e14f-zone-scraping_browser44_local:ot3gwihnmbud
-               
+                # wss://brd-customer-hl_6f60e14f-zone-new_scraping_browser40:lefea6sa585c@brd.superproxy.io:9222/ 
+                # wss://brd-customer-hl_6f60e14f-zone-new_scraping_browser40:lefea6sa585c@brd.superproxy.io:9222
                 # connect over CDP
-                browser = p.chromium.connect_over_cdp("wss://brd-customer-hl_6f60e14f-zone-scraping_browser44_local:ot3gwihnmbud@brd.superproxy.io:9222/")
+                browser = p.chromium.connect_over_cdp(proxy_url)
                 # proxy_config["endpoint"]
                 # browser = p.chromium.connect_over_cdp(proxy_config["endpoint"])
                 user_agent = random.choice(self.user_agents)
@@ -426,13 +306,13 @@ class ScraperService:
             # logger.info(f"✅ Connection successful with {method_label}")
             print(f"✅ Connection successful with {method_label}")
         except Exception as e:
-            logger.error(f"❌ Connection failed with {method_label}: {e}")
+            # logger.error(f"❌ Connection failed with {method_label}: {e}")
             print(f"❌ Connection failed with {method_label}: {e}")
             raise RuntimeError(f"Connection test failed with {method_label}: {e}")
 
     def _perform_scraping(self, page, keyword, options):
         # logger.info(f'🔍 Performing scraping for "{keyword}"')
-        print(f'🔍 Performing scraping for "{keyword}"')
+        print(f'🔍 Performing google scraping for "{keyword}"')
 
         # consent
         self._handle_consent(page)
@@ -669,3 +549,313 @@ class ScraperService:
             print(f"Preview:\n{ai_content['rawText'][:300]}{'...' if len(ai_content['rawText'])>300 else ''}")
 
         return ai_content
+    
+    def scrape_with_scraping_browser_chatgpt(self, keyword, options):
+        print("🌐 Using Scraping Browser method")
+        print("🔍 ChatGPT with Scraping Browser (Rotated)")
+        
+        # proxy_config = self.proxy_rotation.get_healthy_scraping_browser()
+        browser = None
+
+        from playwright.sync_api import sync_playwright
+        with sync_playwright() as p:
+            try:
+                PROXY_USER = os.getenv("BRIGHT_DATA_USERNAME")
+                PROXY_PASS = os.getenv("BRIGHT_DATA_PASSWORD")
+                PROXY_HOST = os.getenv("BRIGHT_DATA_HOST", "brd.superproxy.io")
+                PROXY_PORT = os.getenv("BRIGHT_DATA_PORT", "9222")
+                
+                proxy_url = f"wss://{PROXY_USER}:{PROXY_PASS}@{PROXY_HOST}:{PROXY_PORT}"
+                
+                browser = p.chromium.connect_over_cdp(proxy_url)
+                # proxy_config["endpoint"]
+                # browser = p.chromium.connect_over_cdp(proxy_config["endpoint"])
+                user_agent = random.choice(self.user_agents)
+                viewport = random.choice(self.viewports)
+                print(f"---------------user agent: {user_agent}, viewport: {viewport}---------------")
+                
+                context = browser.new_context(
+                    viewport=viewport,
+                    user_agent= user_agent,
+                    locale="en-US",
+                    timezone_id="America/New_York",
+                    ignore_https_errors=True,
+                )
+                
+                page = context.new_page()
+                
+                self._test_connection_chatgpt(page, "Residential Proxy")
+                
+                result = self._perform_scraping_chatgpt(page, keyword, options)
+                
+                # Mark proxy as healthy if successful
+                # Add proxy info to result
+                
+                return result
+                
+            except Exception as e:
+                # mark unhealthy
+                # self.proxy_rotation.update_proxy_health("scrapingBrowser", proxy_config["id"], False, str(e))
+                print(f"Error in scrape with scraping browser: {e}")
+                raise
+            finally:
+                try:
+                    if browser:
+                        browser.close()
+                except Exception:
+                    pass
+                    
+    def _test_connection_chatgpt(self, page, method):
+        try:
+            page.goto("https://chatgpt.com?model=gpt-4o", timeout=self.config["timeouts"]["test"])
+            logger.info(f"✅ Connection successful with {method}")
+            print(f"✅ Connection successful with {method}")
+        except Exception as e:
+            logger.error(f"❌ Connection failed with {method}: {e}")
+            print(f"❌ Connection failed with {method}: {e}")
+            raise
+
+    def _perform_scraping_chatgpt(self, page, keyword, options):
+        try:
+            # logger.info(f"🔍 Performing scraping for keyword: '{keyword}'")
+            print(f"🔍 Performing scraping for keyword: '{keyword}'")
+
+            res_image_name = self._perform_search_chatgpt(page, keyword)
+            response = self._get_chatgpt_response(page, options, res_image_name)
+
+            if not response:
+                logger.warning(f"⚠️ No ChatGPT response found for keyword: '{keyword}'")
+                return None
+
+            return {
+                "keyword": keyword,
+                "response": response,
+                "extractedAt": datetime.utcnow().isoformat(),
+                "success": True,
+                "tool_type": "chatgpt",
+            }
+        except Exception as e:
+            logger.error("❌ Scraping performance failed", exc_info=e)
+            raise
+
+    def _perform_search_chatgpt(self, page, keyword):
+        try:
+            searchSelectors = [
+                "#prompt-textarea",
+                'textarea[data-id="root"]',
+                'textarea[placeholder*="message"]',
+            ]
+            
+            try:
+                web_search_button = page.wait_for_selector(
+                    "[data-testid='composer-button-search']",
+                    timeout=self.config["timeouts"]["element"],
+                    state="visible"
+                )
+                
+                print("✅ Clicked on web search button")
+            except Exception as e:
+                logger.error("❌ Search button not found or not clickable")
+                print("❌ Search button not found or not clickable")
+                raise e
+            
+            searchBox = None
+            usedSelector = None
+            
+            for selector in searchSelectors:
+                try:
+                    searchBox = page.wait_for_selector(selector, timeout=self.config["timeouts"]['element'],state="visible")
+                    if(searchBox):
+                        usedSelector = selector
+                        print(f"✅ Found search box with selector: {selector}")
+                        break
+                except Exception as e:
+                    continue
+                
+            if not searchBox:
+                img = self.error_dir / f"debug_no_searchbox_{int(time.time()*1000)}.png"
+                page.screenshot(path=str(img), full_page=True)
+                raise RuntimeError("Search box not found")
+            
+            # Clear and type search query
+            searchBox.click()
+            page.keyboard.press("Control+A")
+            page.keyboard.press("Delete")
+            page.wait_for_timeout(500)
+            
+            # type like human
+            for ch in keyword:
+                page.type(usedSelector, ch, delay=80 + int(random.random() * 120))
+
+            page.wait_for_timeout(1000 + int(random.random() * 500))
+            page.keyboard.press("Enter")
+
+            # wait results
+            page.wait_for_load_state("domcontentloaded")
+            page.wait_for_timeout(10000 + int(random.random() * 2000))
+
+            img = self.result_dir / f"ChatGPT_{int(time.time()*1000)}.png"
+            page.screenshot(path=str(img), full_page=True)
+            # logger.info("✅ Search completed successfully")
+            print("✅ Search completed successfully")
+            return str(img)
+        except Exception as error:
+            logger.error(f"Failed to send ChatGPT prompt: {error}")
+            print(f"Failed to send ChatGPT prompt: {error}")
+            raise error
+
+    # async def close_gpt5_modal(self, page):
+    #     modal = page.locator('[role="dialog"]')
+    #     close_btn = modal.locator('button[data-testid="close-button"]')
+
+    #     try:
+    #         appeared = await modal.wait_for(state="attached", timeout=10000)
+    #     except:
+    #         return False
+
+    #     for _ in range(3):
+    #         try:
+    #             await close_btn.wait_for(state="visible", timeout=2000)
+    #             await close_btn.click()
+    #             await modal.wait_for(state="detached", timeout=3000)
+    #             logger.info("✅ GPT-5 popup closed")
+    #             return True
+    #         except:
+    #             await asyncio.sleep(0.25)
+
+    #     try:
+    #         await page.keyboard.press("Escape")
+    #         await modal.wait_for(state="detached", timeout=2000)
+    #         return True
+    #     except:
+    #         return False
+
+    def _get_chatgpt_response(self, page, options, res_image_name):
+        logger.info("⏳ Waiting for ChatGPT response...")
+        print("⏳ Waiting for ChatGPT response...")
+
+        page.wait_for_timeout(1000)
+        
+        attempts = 0
+        max_attempts = 60 # 60 sec max
+        
+        while attempts < max_attempts:
+            stopBtn = page.query_selector('button[aria-label="Stop streaming"]')
+            
+            if not stopBtn:
+                print(stopBtn, "stopBtn not visible")
+                break
+            page.wait_for_timeout(1000)
+            
+            attempts += 1
+            
+        sourcesBtn = None
+        citations = []
+        
+        try:
+            sourcesBtn = page.wait_for_selector("button[aria-label='Sources']",timeout = 5000, state = "visible")
+            
+            if sourcesBtn:
+                print("✅ Sources button found. Clicking...")
+                print("✅ Sources button found. Scrolling into view...")
+                
+                # Step 1: Scroll into view to try to avoid blockers
+                
+                sourcesBtn.scroll_into_view_if_needed()
+                page.wait_for_timeout(500)
+                
+                # Step 2: Try click with fallback
+                try:
+                    sourcesBtn.click(timeout=3000)
+                    print("✅ Sources button clicked successfully.")
+                except Exception as click_error:
+                    logger.warning("⚠️ Regular click failed. Trying force-click via DOM...")
+
+                    # Step 3: Use force click via JS if blocked
+                    # page.evaluate("(el) => el.click()", sourcesBtn)
+                    page.evaluate("el => el.click()", sourcesBtn)
+
+                    logger.info("✅ Sources button clicked using evaluate().")
+                    
+                # Extract citations
+                
+                citations = page.eval_on_selector_all(
+                    'a[href^="http"]',
+                    """links => links.map(a => ({
+                        href: a.href,
+                        title: a.querySelector("div.font-semibold")?.textContent.trim() || "Untitled"
+                    }))"""
+                )
+
+                logger.info(f"🔗 Found {len(citations)} citations.")
+                print(f"🔗 Found {len(citations)} citations.")
+        except Exception as err:
+            print("source button not found error:", err)
+            logger.warning("❌ Sources button not found or citation section failed to load.")
+            
+        response_selectors = [
+            'div[data-message-author-role="assistant"]',
+            '[data-message-author-role="assistant"] .markdown',
+            '[data-message-author-role="assistant"] div[class*="prose"]',
+            '.group:last-child [data-message-author-role="assistant"]',
+        ]
+        
+        response_element = None
+        for selector in response_selectors:
+            try:
+                elements = page.query_selector_all(selector)
+                if elements and len(elements) > 0:
+                    response_element = elements[-1]  # Get latest
+                    break
+            except Exception:
+                continue
+            
+        # ✅ Scroll down to the bottom of the response
+        page.evaluate("window.scrollTo(0, document.body.scrollHeight)")
+        logger.info("⬇️ Scrolled to bottom of page")
+
+        # ✅ Wait a moment for all animations/images to load
+        page.wait_for_timeout(10000)
+        
+        img = self.result_dir / f"ChatGPT_{int(time.time()*1000)}.png"
+        page.screenshot(path=str(img), full_page=True)
+
+        logger.info(f"📸 Screenshot saved as {img}")
+        print(f"📸 Screenshot saved as {img}")
+        
+        if not response_element:
+            print("No ChatGPT response found")
+            return None
+        
+        response_text = response_element.text_content()
+        
+        # print("✅ ChatGPT response received (${responseText.length} characters")
+        print(f"✅ ChatGPT response received ({len(response_text)} characters)")
+        
+        final_response = {
+            "text": response_text,
+            "clean_text": response_text,
+            "html": response_text,
+            "links": citations,
+            "data_mcpr_values": "",
+            "selector": "",
+            "boundingBox": "",
+            "wordCount": len((response_text or "").split()),
+            "characterCount": len(response_text or ""),
+            "images": res_image_name,
+        }
+
+        print("\n=== 🎉 ChatGPT Response FOUND ===")
+        print(f"📍 Selector used: {response_element}")
+        print(f"📝 Clean text length: {len(final_response['clean_text'])} characters")
+        print(f"🔗 Links found: {len(final_response['links'])}")
+        preview = final_response["clean_text"][:300]
+        if len(final_response["clean_text"]) > 300:
+            preview += "..."
+        print(f"📄 Content preview:\n{preview}")
+
+        return final_response
+                
+        
+        
+        

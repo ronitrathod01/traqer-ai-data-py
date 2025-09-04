@@ -45,7 +45,7 @@ class ScraperView(APIView):
                     "tool_type": tool_type,
                     "options": options
                 },
-                "user_id": 1,
+                "user_id": str(request.user.id),
                 "status": "pending",
             })
 

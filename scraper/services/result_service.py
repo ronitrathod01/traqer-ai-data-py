@@ -5,7 +5,7 @@ from scraper.models import Result, Job
 logger = logging.getLogger(__name__)
 
 class ResultService:
-    def save_result(self, *, keyword, method, data, job_id=None, created_at=None, user_id=None):
+    def save_result(self, *, keyword, method, data, job_id=None, metadata=None, created_at=None, user_id=None):
         job = None
         if job_id:
             try:
@@ -20,6 +20,7 @@ class ResultService:
             method=method,
             data=data,  # JSONField
             job=job,
+            metadata=metadata,
             user_id=user_id,
             created_at=created_at or timezone.now(),
         )
