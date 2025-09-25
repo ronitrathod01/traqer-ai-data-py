@@ -167,9 +167,8 @@ class ScraperService:
                         "completed_at": timezone.now(),
                     }
                 )
-            raise
 
-    # -------------------- Method selection (Node: _getMethodOrder) --------------------
+    # -------------------- Method selection --------------------
 
     def _get_method_order(self, method: str):
         if method == "scraping_browser":
@@ -178,7 +177,7 @@ class ScraperService:
             return ["residentialProxy"]
         return ["scrapingBrowser", "residentialProxy"]  # default auto
 
-    # -------------------- Dispatcher (Node: _scrapeWithMethod) --------------------
+    # -------------------- Dispatcher --------------------
 
     def _scrape_with_method(self, keyword, method, tool_type, options):
         if method == "scrapingBrowser":
@@ -187,7 +186,7 @@ class ScraperService:
             elif tool_type == "chatgpt":
                 return self.scrape_with_scraping_browser_chatgpt(keyword, options)
             elif tool_type == "perplexity":
-                raise NotImplementedError("perplexity method not yet ported")
+                return self.scrape_with_scraping_browser_perplexity(keyword, options)
             else:
                 return {"error": "tool type not matched"}
             
@@ -196,6 +195,8 @@ class ScraperService:
                 return self._scrape_with_scraping_browser(keyword, options)
             elif tool_type == "chatgpt":
                 return self.scrape_with_scraping_browser_chatgpt(keyword, options)
+            elif tool_type == "perplexity":
+                return self.scrape_with_scraping_browser_perplexity(keyword, options)
             return {"error": "tool type not matched"}
         
         else:
@@ -665,7 +666,7 @@ class ScraperService:
             for selector in searchSelectors:
                 try:
                     searchBox = page.wait_for_selector(selector, timeout=self.config["timeouts"]['element'],state="visible")
-                    if(searchBox):
+                    if searchBox:
                         usedSelector = selector
                         print(f"✅ Found search box with selector: {selector}")
                         break
@@ -857,5 +858,368 @@ class ScraperService:
         return final_response
                 
         
+    def scrape_with_scraping_browser_perplexity(self, keyword, options, location="mumbai"):
+        print("🌐 Using Scraping Browser method")
+        print("🤖 Perplexity with Scraping Browser (Rotated)")
+        
+        browser = None
+        
+        from playwright.sync_api import sync_playwright
+        with sync_playwright() as p:
+            try:
+                PROXY_USER = os.getenv("BRIGHT_DATA_USERNAME")
+                PROXY_PASS = os.getenv("BRIGHT_DATA_PASSWORD")
+                PROXY_HOST = os.getenv("BRIGHT_DATA_HOST", "brd.superproxy.io")
+                PROXY_PORT = os.getenv("BRIGHT_DATA_PORT", "9222")
+                
+                proxy_url = f"wss://{PROXY_USER}:{PROXY_PASS}@{PROXY_HOST}:{PROXY_PORT}"
+                
+                browser = p.chromium.connect_over_cdp(proxy_url)
+                user_agent = random.choice(self.user_agents)
+                viewport = random.choice(self.viewports)
+                
+                context = browser.new_context(
+                    viewport=viewport,
+                    user_agent= user_agent,
+                    locale="en-US",
+                    timezone_id="America/New_York",
+                    ignore_https_errors=True,
+                )
+                
+                page = context.new_page()
+                
+                self._test_connection_perplexity(page, "Scraping Browser")
+                
+                page.wait_for_timeout(3000)
+                
+                result = self._perform_scraping_perplexity(page, keyword, options)
+                
+                # Mark proxy as healthy if successful
+                # Add proxy info to result
+                
+                return result
+                
+            except Exception as e:
+                # mark unhealthy
+                # self.proxy_rotation.update_proxy_health("scrapingBrowser", proxy_config["id"], False, str(e))
+                print(f"Error in scrape with scraping browser: {e}")
+            finally:
+                try:
+                    if browser:
+                        browser.close()
+                except Exception:
+                    pass
+                
+    def _test_connection_perplexity(self, page, method):
+        try:
+            page.goto("https://www.perplexity.ai/", timeout=self.config["timeouts"]["test"], wait_until="domcontentloaded")
+            print(f"✅ Connection successful with {method}")
+            
+        except Exception as e:
+            print(f"❌ Connection failed with {method}: {e}")
+            raise ConnectionError
+    
+    def _perform_scraping_perplexity(self, page, keyword, options):
+        try:
+            print(f"🔍 Performing scraping for keyword: {keyword}")
+            
+            res_image_name = self._perform_search_perplexity(page, keyword)
+             
+            response = self._get_perplexity_response(page, options, res_image_name)
+            
+            if not response:
+                print(f"No Perplexity response found for keyword: {keyword}")
+                return None
+            
+            return {
+                "keyword": keyword,
+                "response": response,
+                "extractedAt": datetime.utcnow().isoformat(),
+                "success": True,
+                "tool_type": "perplexity",      
+            }
+            
+        except Exception as e:
+            print(f"❌ Scraping performance failed:{e}")
+
+            
+    def _perform_search_perplexity(self, page, keyword):
+        try:
+            page.wait_for_timeout(2000)
+            
+            search_selectors = ["#ask-input"]
+            
+            used_selector = None
+            search_box = None
+            
+            for selector in search_selectors:
+                try:
+                    search_box = page.wait_for_selector(selector, timeout=self.config["timeouts"]["element"], state= "visible")
+                    if search_box:
+                        used_selector=selector
+                        print(f"✅ Found search box with selector: {selector}")
+                        print(f"search box: {search_box}")
+                        break
+                except Exception as e:
+                    continue
+                
+            if not search_box:
+                img = self.error_dir / f"debug_no_searchbox_{int(time.time()*1000)}.png"
+                page.screenshot(path=str(img), full_page=True)
+                raise RuntimeError("search box not found")
+                
+            # Clear and type search query
+            search_box.click()
+            print("✅ Clicked on search box")
+            page.keyboard.press("Control+A")
+            page.keyboard.press("Delete")
+            page.wait_for_timeout(500)
+            
+            for ch in keyword:
+                page.type(used_selector, ch, delay=80 + int(random.random() * 120))
+                
+            print("✅ Finished typing the prompt")    
+            page.wait_for_timeout(2000 + int(random.random() * 500))
+            page.keyboard.press("Enter")
+            
+            print("✅ Perplexity prompt sent")
+            
+            page.wait_for_load_state("domcontentloaded")
+            page.wait_for_timeout(10000 + int(random.random() * 2000))
+            
+            img = self.result_dir / f"Perplexity_{int(time.time()*1000)}.png"
+            page.screenshot(path=str(img), full_page=True)
+            
+            print("✅ Perplexity Search completed successfully")
+            
+            return str(img)
+        except Exception as error:
+            print(f"Failed to send perplexity prompt: {error}")
+            raise error    
+            
+    
+    def _get_perplexity_response(self, page, options, res_image_name):
+        print("⏳ Waiting for Perplexity response...")
+        
+        page.wait_for_timeout(10000)
+        
+        attempts = 0 
+        max_attemps = 60
+        
+        while attempts < max_attemps:
+            stop_btn = page.query_selector('button[aria-label="Stop generating response"]')
+    
+            if not stop_btn:
+                print(f"{stop_btn}, stop btn not visible")
+                break
+            
+            page.wait_for_timeout(1000)
+            attempts+=1
+            
+        response_selectors = ['div[id^="markdown-content-"]']
+        response_element = None
+        
+        for selector in response_selectors:
+            try:
+                elements = page.query_selector_all(selector)
+                if elements:
+                    response_element = elements[-1]
+                    break
+                  
+            except Exception as e:
+                continue
+            
+        resultimg = self.result_dir / f"Perplexity_{int(time.time()*1000)}.png"
+        page.screenshot(path=str(resultimg), full_page=True)
+        # res_image_name = str(resultimg)
+        
+        page.evaluate("window.scrollTo(0, document.body.scrollHeight)")
+        print("⬇️ Scrolled to bottom of page")
+        
+        page.wait_for_timeout(2000)
+        
+        timestamp = int(time.time() * 1000)
+        image = self.result_dir / f"Perplexity_response_{int(time.time()*1000)}.png"
+        page.screenshot(path=str(image), full_page=True)
+        
+        print(f"screenshot save as {image}")
+        
+        if not response_element:
+            print("No perplexity response found.")
+            return None
+        
+        response_text = response_element.text_content()
+        
+        print(f"✅ Perplexity response received ({len(response_text)} characters)")
+        
+        page.wait_for_timeout(5000)
+        
+        source_btn = None
+        citation = []
+        
+        try:
+           citation = page.eval_on_selector_all(
+               'a[href^="http"]',
+                """links => links.map(a => ({
+                    href: a.href,
+                    title: a.querySelector("div.font-semibold")?.textContent.trim() || "Untitled"
+                }))"""
+           )
+           
+           print(f"🔗 Found {len(citation)} citations.")
+           for c in citation:
+               print(f" - {c['title']}: {c['href']}")
+        except Exception as e:
+            print("source button not found error: ", e.message)
+            print("❌ Sources button not found or citation section failed to load.")
+            
+        final_response = {
+            "markdown": response_text,
+            "rawText": response_text,
+            "html": response_text,
+            "links": citation,
+            "data_mcpr_values": "",
+            "selector": "",
+            "boundingBox": "",
+            "wordCount": len((response_text or "").split()), 
+            "characterCount": len(response_text or ""),
+            "image": res_image_name
+        }
+        
+        print("\n=== Perplexity Response FOUND ===")
+        print(f"📍 Selector used: ${response_element}")
+        print(f"📝 Clean text length: {len(final_response['rawText'])} characters")
+        print(f"🔗 Links found: {len(final_response['links'])}")
+
+        preview = final_response["rawText"][:300]
+        if len(final_response["rawText"]) > 300:
+            preview += "..."
+        print(f"📄 Content preview:\n{preview}")
+        
+        return final_response
+    
+    def scrape_batch(self, keywords, method="auto", options={}, jobid=None, tool_type=None):
+        results = {}
+        errors = {}
+        delay = options.get("delay", 30000) / 1000
+        max_concurrent = options.get("maxConcurrent", 1)
+        processed = 0
+        successful = 0
+        failed = 0
+        
+        try:
+            if jobid:
+                self.job_service.update_job(jobid, updates={
+                    "status": "running",
+                    "started_at": timezone.utcnow(),
+                    "progress": 0,
+                })
+                
+                print(f"Starting batch scrape for {len(keywords)} keywords")
+                
+                for i in range(0, len(keywords), max_concurrent):
+                    chunk = keywords[i:i +  max_concurrent]
+                    
+                    for index, keyword in enumerate(chunk):
+                        try: 
+                            print(f'Processing keyword {processed + index + 1}/{len(keywords)}: "{keyword}"')
+                            result =  self.scrape_keyword(
+                            keyword,
+                            method,
+                            tool_type,
+                            {**options, "saveResults": False},
+                            job_id=None,
+                            )
+                            
+                            results[keyword] = result
+                            succesful += 1
+                            print(f'✅ Success for "{keyword}"')
+                
+                        except Exception as e:
+                            print(f'❌ Failed for keyword "{keyword}": {str(e)}')
+                            errors[keyword] = {
+                                "error": str(e),
+                                "timestamp": datetime.utcnow().isoformat(),
+                            }
+                            faild += 1
+                            
+                    processed += len(chunk)    
+                    
+                    if jobid:
+                        progress = round((processed / len(keywords)) * 100)
+                        self.job_service.update_job(jobid, {
+                        "progress": progress,
+                        "processedItems": processed,
+                        "results": {
+                            "results": results,
+                            "errors": errors,
+                            "stats": {"successful": successful, "failed": failed, "total": len(keywords)},
+                        },
+                    })    
+                    
+                    print(f"Progress: {processed}/{len(keywords)} keywords processed "
+                    f"({successful} successful, {failed} failed)")
+                    
+                    # Delay before next chunk
+                    if i + max_concurrent < len(keywords):
+                        logger.info(f"Waiting {delay}s before next batch...")
+                        time.sleep(delay)
+                        
+                    # Save batch results
+                    if options.get("saveResults", True):
+                        for keyword, result in results.items():
+                            self.result_service.save_result({
+                                "keyword": keyword,
+                                "method": result.get("method"),
+                                "data": result,
+                                "jobId": jobid,
+                                "createdAt": datetime.utcnow(),
+                            })
+                            
+                    final_results = {
+                    "results": results,
+                    "errors": errors,
+                    "stats": {
+                        "total": len(keywords),
+                        "successful": successful,
+                        "failed": failed,
+                        "successRate": round((successful / len(keywords)) * 100) if keywords else 0,
+                        },
+                    }
+                    
+                    # Mark job as completed
+                    if jobid:
+                        self.job_service.update_job(jobid, {
+                            "status": "completed",
+                            "results": final_results,
+                            "completedAt": datetime.utcnow(),
+                            "progress": 100,
+                            "processedItems": processed,
+                        })
+
+                    print(
+                        f"Batch scraping completed. Results: {successful}/{len(keywords)} successful"
+                    )
+                    return final_results
+        except Exception as e:
+            print("Batch scraping failed:", exc_info=True)
+            
+            if jobid:
+                self.job_service.update_job(jobid, {
+                    "status": "failed",
+                    "error": str(e),
+                    "results": {
+                        "results": results,
+                        "errors": errors,
+                        "stats": {"successful": successful, "failed": failed, "total": len(keywords)},
+                    },
+                    "completedAt": datetime.utcnow(),
+                    "processedItems": processed,
+                })
+
+            raise e
+         
         
         
+            
+       

@@ -118,3 +118,63 @@ class JobStautsView(APIView):
                 "message": "Failed to get job status",
                 "error": str(e) if settings.DEBUG else "Internal server error"
             }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+            
+class BatchView(APIView):
+    def __init__(self, **kwargs):
+        super().__init__(**kwargs)
+        self.scraper_service = ScraperService()
+        self.job_service = JobService()
+        
+    def post(self, request):
+        keyword = request.data.get("keyword")
+        method = request.data.get("method", "auto")
+        tool_type = request.data.get("tool_type")
+        options = request.data.get("options", {})
+
+        if not keyword or not tool_type:
+            return Response({
+                "success": False,
+                "message": "Keyword and tool_type are required."
+            }, status=status.HTTP_400_BAD_REQUEST)
+            
+        try:
+            job = self.job_service.create_job({
+                "type": "batch_scrape",
+                "tool_type": tool_type,
+                "payload": {
+                    "keyword": keyword,
+                    "method": method,
+                    "tool_type": tool_type,
+                    "options": options
+                },
+                "user_id": str(request.user.id),
+                "status": "pending",
+                "totalItems": len(keyword)
+            })
+            
+            import threading
+            threading.Thread(
+                target=self.scraper_service.scrape_batch,
+                args=(keyword, method, tool_type, options, job.id)
+            ).start()
+            
+            return Response({
+                "success": True,
+                "message": "Batch scraping job started",
+                "data": {
+                    "jobid": job.id,
+                    "keywords": keyword,
+                    "method": method,
+                    "status": "pending",
+                    "estimatedTime": f"{len(keyword)*30}-{len(keyword)*60} seconds",
+                }
+            })
+        except Exception as e: 
+            print(f"Batch scrape error: {e}")
+            
+            return Response({
+                "success": False,
+                "message": "Failed to start batch scraping job",
+                "error": str(e) if settings.DEBUG else "Internal server error"
+            }, status=status.HTTP_500_INTERNAL_SERVER_ERROR
+            )
